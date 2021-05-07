@@ -437,6 +437,7 @@ void main (int argc, char *argv[])
     fclose(testOut); }
 
     printf(" ...done!\n");
+    printf("\n");
   }
 
   for (i=0; i<msk.numint; i++){
@@ -494,6 +495,7 @@ void main (int argc, char *argv[])
     show_status(i*100.0/msk.numint);
   }
 
+  printf("\n");
   printf("\n");
 
   free (fblock);
