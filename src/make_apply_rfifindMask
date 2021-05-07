@@ -1,2 +1,0 @@
-#gcc nrselect.c nsamples.c read_header.c read_block.c pack_unpack.c sizeof_file.c scaledata.c send_stuff.c strings_equal.c swap_bytes.c apply_rfifindMask.c -o ../bin/apply_rfifindMask -lm -Wno-unused-result -O3 -march=native
-gcc ext/nsamples.c read_header.c read_block.c ext/pack_unpack.c ext/sizeof_file.c ext/scaledata.c ext/send_stuff.c ext/strings_equal.c ext/swap_bytes.c apply_rfifindMask.c -o ../bin/apply_rfifindMask -lm -Wno-unused-result -O3 -march=native
