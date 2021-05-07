@@ -54,5 +54,6 @@ dkms.conf
 ##bin/rficlean.flags  # include this in the package as an example
 bin/apply_rfifindMask
 src/bckp*
+src/make_apply_rfifindMask
 src/obj/*
 
