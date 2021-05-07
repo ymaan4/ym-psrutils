@@ -1,0 +1,347 @@
+/*
+ * Copyright (c) 2018  Yogesh Maan <maan@astron.nl>
+ * 
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License as
+ * published by the Free Software Foundation.
+ * 
+ * This program is distributed in the hope that it would be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * 
+ * Further, this software is distributed without any warranty that it is
+ * free of the rightful claim of any third person regarding infringement
+ * or the like.  Any license provided herein, whether implied or
+ * otherwise, applies only to this software file.  Patent licenses, if
+ * any, provided herein do not apply to combinations of this program with
+ * other software, or any other product whatsoever.
+ * 
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write the Free Software Foundation, Inc., 59
+ * Temple Place - Suite 330, Boston MA 02111-1307, USA.
+ * 
+ */
+
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <math.h>
+#include "apply_rfifindMask.h"
+
+
+struct mask {
+  double timesigma,freqsigma,mjd,dtint,lofreq,dfreq;
+  int numchan,numint,ptsperint,num_zap_chans,num_zap_ints;
+  int *num_chans_per_int;
+  int *zap_chans,*zap_ints,**chans;
+};
+struct mask read_mask(char *filename);
+float magic_val=-9999.0;
+
+
+int help_required(char *string)
+{
+  if (strings_equal(string,"--help")) return(1);
+  if (strings_equal(string,"-h")) return(1);
+  return(0);
+}
+
+void apply_rfifindMask_help()
+{
+  puts("*** THIS PROGRAM REPLACES THE DATA CORRESPONDING TO THE   ***");
+  puts("*** rfifind MASK BY 0s (OR RUNNING MEAN). THE ORIGINAL    ***");
+  puts("*** DATA CAN NOT BE RECOVERED AFTER THIS, SO PROCEED WITH ***");
+  puts("*** CAUTION.                                              ***");
+  puts("");
+  puts("");
+  puts("apply_rfifindMask - apply rfifind-mask to filterbank data\n");
+  puts("usage: apply_rfifindMask -{options} {input-filename} \n");
+  puts("options:\n");
+  puts("-mask  file - rfifind generated mask-file name ");
+  puts("-rmean      - replace the rejected sections by running mean (instead of 0) ");
+//  puts("-n numbits  - specify output number of bits (def=input-size)");
+//  puts("-o filename - specify output filename (def=stdout)");
+  puts("");
+}
+
+
+int file_exists(char *filename)
+{
+  if ((fopen(filename,"rb"))==NULL) { return(0);}
+  else { return(1); }
+}
+
+FILE *open_file(char *filename, char *descriptor)
+{
+  FILE *fopen(), *fptr;
+  if ((fptr=fopen(filename,descriptor)) == NULL) {
+    fprintf(stderr,"Error in opening file: %s\n",filename);
+    exit(1);
+  }
+  return fptr;
+}
+
+void error_message(char *message)
+{
+  fprintf(stderr,"ERROR: %s\n",message);
+  exit(1);
+}
+
+//--------------------------------------------------------------
+int all_same(float *arr, int np)
+{
+   int i;
+   float atemp;
+   atemp = arr[0];
+   for (i=1; i<np; i++){
+     if(atemp != arr[i]) return 0;
+   }
+   return 1;
+}
+
+//============== Conventional mean rms ===============================
+/* TO COMPUTE MEAN and RMS OF 'arr' */
+
+void simple_meanrms(float *arr, long int np)
+{
+        long int i;
+        double amean,rms,diff,avar;
+
+        amean = 0.0;
+        for (i=0; i<np; i++){
+          amean=arr[i]+amean;
+        }
+        amean=amean/np;
+
+        rms=0.0;
+        for (i=0;i<np;i++){
+          diff=arr[i]-amean;
+          rms=rms+diff*diff;
+        }
+        avar=rms/(np-1.0);
+        rms=sqrt(rms/(np-1.0));
+
+        arr[np] = amean;
+        arr[np+1] = rms;
+        arr[np+2] = avar;
+        return;
+}
+//============================================================================
+//--------------------------------------------------------------
+
+
+
+void main (int argc, char *argv[])
+{
+  int i, j, nc, headersize ;
+  int64_t ichan,isamp,isampmin,isampmax,k;
+  long istart=0,ii,jj;
+  float tstart=0.0,tend,dur=1.0,lg;
+  char string[80];
+  float *fblock,min,max,*replace, *last_replace, *chandata;
+  unsigned short *sblock;
+  unsigned char  *cblock;
+  int nsaved=0,ns=0,nsblk,opened=0,nout,iter,rmean=0;
+  long int itemp, isum;
+  struct mask msk;
+
+  /* set up default global variables */
+  obits=naddt=nsamp=0;
+
+  if (argc > 2) {
+    i=1;
+    while (i<argc) {
+//      if (strings_equal(argv[i],"-o")) {
+//	output=fopen(argv[++i],"wb");
+//      } else
+      if (strings_equal(argv[i],"-n")) {
+	i++;
+	obits=atoi(argv[i]);
+      } else if (strings_equal(argv[i],"-mask")) {
+	i++;
+	msk=read_mask(argv[i]);
+      } else if (strings_equal(argv[i],"-rmean")) {
+	rmean=1;
+      } else if (help_required(argv[1])) {
+	apply_rfifindMask_help();
+	exit(0);
+      } else if (file_exists(argv[i])) {
+	strcpy(inpfile,argv[i]);
+	input=open_file(inpfile,"r+b");
+      } else {
+	apply_rfifindMask_help();
+	sprintf(string,"unknown argument (%s) passed to apply_rfifindMask",argv[i]);
+	error_message(string);
+      }
+      i++;
+    }
+  }
+  else {
+   apply_rfifindMask_help();
+   exit(0);
+  }
+
+  if ((headersize=read_header(input))) {
+    totsamp = nsamples(inpfile,headersize,nbits,nifs,nchans);
+  } else {
+    error_message("input data file is of unknown origin!!!");
+  }
+
+  naddt = msk.ptsperint ; 
+  if (obits == 0) obits=nbits;
+
+  nsblk=nchans*nifs*naddt;
+  fblock=(float *) malloc(nsblk*sizeof(float));
+  sblock=(unsigned short *) malloc(nsblk*sizeof(unsigned short));
+  cblock=(unsigned char *) malloc(nsblk*sizeof(unsigned short));
+  replace=(float *) malloc(nchans*sizeof(float));
+  last_replace=(float *) malloc(nchans*sizeof(float));
+  chandata=(float *) malloc(naddt*2*sizeof(float));
+  min=0.0;
+  max=(float) pow(2.0,(double)obits) -1.0;
+  for (i=0; i<nchans; i++) replace[i] = 0.0;
+  for (i=0; i<nchans; i++) last_replace[i] = 0.0;
+
+  for (i=0; i<msk.numint; i++){
+    isampmin = msk.ptsperint*(int64_t) i;
+    isampmax = msk.ptsperint*(int64_t) (i+1);
+    if (isampmax > totsamp){
+       isampmax = totsamp;
+       naddt = isampmax - isampmin + 1;
+    }
+    istart = (long) (headersize + (long)(isampmin*nchans*(nbits/8.0)));
+ 
+    if ((ns=read_block(input,nbits,fblock,nsblk,istart))>0) {
+      //----------------------------------------------
+      //--- compute optimum replacement values ---
+      if(rmean>0){  
+        for (j=0; j<msk.num_chans_per_int[i]; j++){
+          ichan = nchans - msk.chans[i][j] - 1; 
+          for (isamp=0; isamp<naddt;isamp++){
+            k = ichan + nchans*isamp;
+            fblock[k] = magic_val;
+          }
+        }
+        for (ichan=0;ichan<nchans;ichan++){
+          isum = 0;
+          for (ii=0, jj=ichan;ii<naddt; ii++,jj+=nchans){
+             if(fblock[jj] != magic_val){
+                isum = isum + 1;
+                chandata[isum-1]=fblock[jj];
+            }
+          }
+          if(isum==0) {
+            replace[ichan]=magic_val;
+          } else {
+            simple_meanrms(chandata, isum);
+            replace[ichan] = chandata[isum];
+          }
+        }
+        lg = magic_val;
+        for (ichan=0;ichan<nchans; ichan++){
+          if(replace[ichan] != magic_val) {
+            lg = replace[ichan];
+            break;
+          }
+        }
+        for (ichan=0;ichan<nchans;ichan++){
+          if(replace[ichan] == magic_val) { replace[ichan] = lg; }
+          else { lg = replace[ichan]; }
+        }
+        // if the whole sub-int was masked...
+        for (ichan=0;ichan<nchans;ichan++){
+          if(replace[ichan] == magic_val){replace[ichan]=last_replace[ichan];}
+        }
+        for (ichan=0;ichan<nchans;ichan++)last_replace[ichan] = replace[ichan];
+      }
+      //----------------------------------------------
+      for (j=0; j<msk.num_chans_per_int[i]; j++){
+        ichan = nchans - msk.chans[i][j] - 1; 
+        for (isamp=0; isamp<naddt;isamp++){
+          k = ichan + nchans*isamp;
+          fblock[k] = replace[ichan];
+        }
+      }
+
+      nout=ns;
+      switch (obits) {
+      case 32:
+        fseek(input, istart, SEEK_SET);
+        fwrite(fblock,sizeof(float),nout,input);
+        break;
+      case 16:
+        fseek(input, istart, SEEK_SET);
+        float2short(fblock,nout,min,max,sblock);
+        fwrite(sblock,sizeof(unsigned short),nout,input);
+        break;
+      case 8:
+        fseek(input, istart, SEEK_SET);
+        float2char(fblock,nout,min,max,cblock);
+        fwrite(cblock,sizeof(unsigned char),nout,input);
+        break;
+      } 
+    } 
+  }
+
+
+  free (fblock);
+  free (sblock);
+  free (cblock);
+  fclose(input);
+  exit(0);
+}
+
+// Read PRESTO rfifind mask (*.mask)
+struct mask read_mask(char *filename)
+{
+  struct mask msk;
+  FILE *file;
+  int i,j;
+
+  // Open file
+  file=fopen(filename,"rb");
+
+  // Read information
+  fread(&msk.timesigma,sizeof(double),1,file);
+  fread(&msk.freqsigma,sizeof(double),1,file);
+  fread(&msk.mjd,sizeof(double),1,file);
+  fread(&msk.dtint,sizeof(double),1,file);
+  fread(&msk.lofreq,sizeof(double),1,file);
+  fread(&msk.dfreq,sizeof(double),1,file);
+  fread(&msk.numchan,sizeof(int),1,file);
+  fread(&msk.numint,sizeof(int),1,file);
+  fread(&msk.ptsperint,sizeof(int),1,file);
+
+  // Channels
+  fread(&msk.num_zap_chans,sizeof(int),1,file);
+  msk.zap_chans=(int *) malloc(sizeof(int)*msk.num_zap_chans);
+  fread(msk.zap_chans,sizeof(int),msk.num_zap_chans,file);
+
+  // Subints
+  fread(&msk.num_zap_ints,sizeof(int),1,file);
+  msk.zap_ints=(int *) malloc(sizeof(int)*msk.num_zap_ints);
+  fread(msk.zap_ints,sizeof(int),msk.num_zap_ints,file);
+
+  // Full mask
+  msk.num_chans_per_int=(int *) malloc(sizeof(int)*msk.numint);
+  fread(msk.num_chans_per_int,sizeof(int),msk.numint,file);
+
+  msk.chans=(int **) malloc(sizeof(int *)*msk.numint);
+  for (i=0;i<msk.numint;i++) {
+    if (msk.num_chans_per_int[i]>0 && msk.num_chans_per_int[i]<msk.numchan) {
+      msk.chans[i]=(int *) malloc(sizeof(int)*msk.num_chans_per_int[i]);
+      fread(msk.chans[i],sizeof(int),msk.num_chans_per_int[i],file);
+    } else if (msk.num_chans_per_int[i]==msk.numchan) {
+      msk.chans[i]=(int *) malloc(sizeof(int)*msk.num_chans_per_int[i]);
+      for (j=0;j<msk.numchan;j++)
+        msk.chans[i][j]=j;
+    }
+  }
+
+  // Close file
+  fclose(file);
+
+  return msk;
+}
+
