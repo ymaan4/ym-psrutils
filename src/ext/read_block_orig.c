@@ -8,8 +8,7 @@
 #include "utils.h"
 
 
-int read_block(FILE *input, int nbits, float *block, int nread, long istart) 
-//int read_block(FILE *input, int nbits, float *block, int nread) 
+int read_block_orig(FILE *input, int nbits, float *block, int nread) /*includefile*/
 {
   int i,j,k,s1,s2,s3,s4,iread;
   unsigned char *charblock;
@@ -17,7 +16,6 @@ int read_block(FILE *input, int nbits, float *block, int nread, long istart)
   long seed=0;
 
   /* decide how to read the data based on the number of bits per sample */
-  fseek(input, istart, SEEK_SET);
   switch(nbits) {
   case 1:
     /* read n/8 bytes into character block containing n 1-bit pairs */
@@ -71,7 +69,6 @@ int read_block(FILE *input, int nbits, float *block, int nread, long istart)
     /* copy numbers into datablock */
     for (i=0; i<iread; i++) {
       block[i]=(float) charblock[i];
-      //printf(" --%d \n",i);
     }
     free(charblock);
     break;

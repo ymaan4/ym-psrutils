@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "header.h"
-#include "apply_rfifindMask.h"
+#include "utils.h"
 #include <string.h>
 int nbins;
 double period;
@@ -14,7 +14,13 @@ void get_string(FILE *inputfile, int *nbytes, char string[]) /* includefile */
   strcpy(string,"ERROR");
   fread(&nchar, sizeof(int), 1, inputfile);
   if (feof(inputfile)) exit(0);
-  if (nchar>80 || nchar<1) return;
+  if (nchar>80 || nchar<1){
+    printf("\nnchar: %d ; more than allowed limit of 80.\n",nchar);
+    *nbytes=sizeof(int);
+    fread(string, 79, 1, inputfile);
+    printf("Partial string: '%s'\n",string);
+    return;
+  }
   *nbytes=sizeof(int);
   fread(string, nchar, 1, inputfile);
   string[nchar]='\0';
@@ -156,7 +162,8 @@ int read_gmheader(char gminfofile[], char gmhdrfile[]) /* includefile */
   int expecting_source_name=0; 
   int hh,mm,day,month,year,nyear,nday,istat;
   double signed_bwidth,bwidth;
-  double seconds,mjd_day,mjd_fracday;
+  long double seconds,mjd_fracday;
+  double mjd_day;
   FILE *infofile,*timefile;
 
   infofile = fopen(gminfofile,"rb");
@@ -180,18 +187,19 @@ int read_gmheader(char gminfofile[], char gmhdrfile[]) /* includefile */
   nbeams = 1;
   ibeam = 1;
   telescope_id=7;   // for GMRT
-  machine_id=17; //unknown
+  //machine_id=17; //unknown
+  machine_id=7; //GMRTFB
 
   timefile = fopen(gmhdrfile,"rb");
   fscanf(timefile, "%s %s %s %s\n", string,string,string,string);
-  fscanf(timefile, "%s %s %d:%d:%lf  \n", str1,str2,&hh,&mm,&seconds);
+  fscanf(timefile, "%s %s %d:%d:%Lf  \n", str1,str2,&hh,&mm,&seconds);
   fscanf(timefile, "%s  %d:%d:%d  \n", str1,&day,&month,&year);
   fclose(timefile);
 
   slaCldj(year,month,day, &mjd_day, &istat);
   mjd_fracday = (hh + (mm + (seconds / 60.0)) / 60.0) / 24.0;
   tstart = mjd_day + mjd_fracday - 5.5/24.0 ;  // correct for 5.5 hours diff between IST and UT
-  //printf("mjd_day, mjd_fracday, tstart  %lf  %lf  %.12lf\n",mjd_day, mjd_fracday, tstart);
+  //printf("mjd_day, mjd_fracday, tstart  %lf  %.15Lf  %.15lf\n",mjd_day, mjd_fracday, tstart);
 
   return 1;
 }

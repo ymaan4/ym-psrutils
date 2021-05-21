@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include "apply_rfifindMask.h"
+#include "utils.h"
 
 /* 
 	some useful routines written by Jeff Hagen for swapping

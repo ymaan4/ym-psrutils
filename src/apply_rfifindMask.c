@@ -8,8 +8,8 @@
 #include <stdint.h>
 #include <math.h>
 #include <unistd.h>
-#include "apply_rfifindMask.h"
-
+#include "utils.h"
+#include "utils.h"
 
 struct mask {
   double timesigma,freqsigma,mjd,dtint,lofreq,dfreq;
@@ -20,13 +20,6 @@ struct mask {
 struct mask read_mask(char *filename);
 float magic_val=-9999.0;
 
-
-int help_required(char *string)
-{
-  if (strings_equal(string,"--help")) return(1);
-  if (strings_equal(string,"-h")) return(1);
-  return(0);
-}
 
 void apply_rfifindMask_help()
 {
@@ -48,28 +41,6 @@ void apply_rfifindMask_help()
 }
 
 
-int file_exists(char *filename)
-{
-  if ((fopen(filename,"rb"))==NULL) { return(0);}
-  else { return(1); }
-}
-
-FILE *open_file(char *filename, char *descriptor)
-{
-  FILE *fopen(), *fptr;
-  if ((fptr=fopen(filename,descriptor)) == NULL) {
-    fprintf(stderr,"Error in opening file: %s\n",filename);
-    exit(1);
-  }
-  return fptr;
-}
-
-void error_message(char *message)
-{
-  fprintf(stderr,"ERROR: %s\n",message);
-  exit(1);
-}
-
 //--------------------------------------------------------------
 int all_same(float *arr, int np)
 {
@@ -85,7 +56,7 @@ int all_same(float *arr, int np)
 //============== Conventional mean rms ===============================
 /* TO COMPUTE MEAN and RMS OF 'arr' */
 
-void simple_meanrms(float *arr, long int np)
+void simple_meanrms_fl(float *arr, long int np)
 {
         long int i;
         float amean,rms,diff,avar;
@@ -109,6 +80,7 @@ void simple_meanrms(float *arr, long int np)
         arr[np+2] = avar;
         return;
 }
+
 float simple_mean(float *arr, long int np)
 {
         long int i;
@@ -133,7 +105,7 @@ void robust_meanrms_new(float *arr, long int np)
         long int i,iter,maxiter;
         float an,amean,amean0,rms,rms0,diff,thresh;
 
-        simple_meanrms(arr,np);
+        simple_meanrms_fl(arr,np);
         amean=arr[np];
         rms=arr[np+1];
 

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include "apply_rfifindMask.h"
+#include "utils.h"
 
 FILE *input, *output;
 int swapout;
