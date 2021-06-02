@@ -51,10 +51,10 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-##bin/
+##
 bin/apply_rfifindMask
 bin/normByRMS
 src/bckp*
 src/make_apply_rfifindMask
-src/obj/*
+src/obj/*.o
 
