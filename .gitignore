@@ -53,7 +53,7 @@ dkms.conf
 
 ##bin/
 bin/apply_rfifindMask
-bin/*
+bin/normByRMS
 src/bckp*
 src/make_apply_rfifindMask
 src/obj/*
