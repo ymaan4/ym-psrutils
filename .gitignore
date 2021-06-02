@@ -51,8 +51,9 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-##bin/rficlean.flags  # include this in the package as an example
+##bin/
 bin/apply_rfifindMask
+bin/*
 src/bckp*
 src/make_apply_rfifindMask
 src/obj/*
